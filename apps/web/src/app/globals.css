@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0b0c0e;
+  --bg-raised: #12141a;
+  --bg-hover: #1a1d26;
+  --line: #232633;
+  --text: #eceef2;
+  --muted: #8b90a0;
+  --accent: #ff6a2b;
+  --accent-2: #ffb088;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "IBM Plex Sans", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2e3a transparent;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.rf-flow .react-flow__node {
+  font-family: inherit;
+}
+.rf-flow .react-flow__edge-text {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.rf-flow .react-flow__edge-textbg {
+  fill: #12141a;
+  fill-opacity: 0.96;
+}
+.rf-flow .react-flow__handle {
+  width: 14px;
+  height: 14px;
+  pointer-events: all;
+}
+.rf-flow .react-flow__handle-left {
+  left: -7px;
+  top: 50%;
+}
+.rf-flow .react-flow__handle-right {
+  right: -7px;
+  top: 50%;
+}
+.rf-flow .react-flow__handle-top,
+.rf-flow .react-flow__handle-bottom {
+  display: none;
+}
+.rf-flow .react-flow__controls {
+  background: #12141a;
+  border: 1px solid #232633;
+  box-shadow: none;
+}
+.rf-flow .react-flow__controls-button {
+  background: #12141a;
+  border-bottom: 1px solid #232633;
+  fill: #c4c8d4;
+}
+.rf-flow .react-flow__minimap {
+  background: #0e1014;
+}
+.rf-flow .react-flow__attribution {
+  display: none;
+}
+
+.rf-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+}

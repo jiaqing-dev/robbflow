@@ -1,0 +1,59 @@
+[project]
+name = "robbflow"
+version = "0.2.0"
+description = "RobbFlow — Open Source Engineering Operating System"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "RobbFlow Contributors" }]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.25",
+  "ruff>=0.9",
+  "httpx>=0.28",
+]
+
+[tool.uv.workspace]
+members = [
+  "apps/api",
+  "apps/worker",
+  "packages/domain",
+  "packages/workflow",
+  "packages/automation",
+  "packages/integrations",
+  "packages/agent",
+]
+
+[tool.uv.sources]
+robbflow-domain = { workspace = true }
+robbflow-workflow = { workspace = true }
+robbflow-automation = { workspace = true }
+robbflow-integrations = { workspace = true }
+robbflow-agent = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["apps", "packages"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+  "robbflow_api",
+  "robbflow_domain",
+  "robbflow_workflow",
+  "robbflow_automation",
+  "robbflow_integrations",
+  "robbflow_agent",
+  "robbflow_worker",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["packages/domain", "packages/workflow", "packages/automation", "apps/api"]
+testpaths = ["packages/workflow/tests", "packages/domain/tests", "apps/api/tests"]

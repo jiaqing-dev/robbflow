@@ -1,0 +1,12 @@
+{
+  "name": "robbflow",
+  "private": true,
+  "version": "0.1.0",
+  "description": "RobbFlow — Open Source Engineering Operating System",
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "dev": "pnpm --filter @robbflow/web dev",
+    "build": "pnpm --filter @robbflow/web build",
+    "lint": "pnpm --filter @robbflow/web lint"
+  }
+}
