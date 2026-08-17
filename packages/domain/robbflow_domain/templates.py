@@ -36,6 +36,15 @@ WORK_TEMPLATES: list[dict[str, Any]] = [
             {"type_key": "issue", "name": "事项表"},
         ],
     },
+    {
+        "key": "ops_ticket",
+        "name": "事务工单",
+        "description": "申请 → 审批 → 处理 → 关闭，适合中小企业简易事务，不替代 OA。",
+        "tables": [
+            {"type_key": "ticket", "name": "工单表"},
+            {"type_key": "task", "name": "任务表"},
+        ],
+    },
 ]
 
 

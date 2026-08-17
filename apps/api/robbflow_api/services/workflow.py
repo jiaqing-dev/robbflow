@@ -26,7 +26,13 @@ def definition_from_orm(wf: Workflow) -> WorkflowDefinition:
             for s in states
         ],
         [
-            {"from_state": t.from_state, "to_state": t.to_state, "name": t.name}
+            {
+                "from_state": t.from_state,
+                "to_state": t.to_state,
+                "name": t.name,
+                "require_role": t.require_role,
+                "require_approver": t.require_approver,
+            }
             for t in wf.transitions
         ],
     )

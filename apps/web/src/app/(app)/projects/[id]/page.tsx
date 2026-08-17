@@ -8,20 +8,23 @@ import { CreateIssueDialog } from "@/components/create-issue-dialog";
 import { IssuePeek } from "@/components/issue-peek";
 import { Kanban } from "@/components/kanban";
 import { ProjectCycles } from "@/components/project-cycles";
+import { ProjectDocs } from "@/components/project-docs";
 import { ProjectForm } from "@/components/project-form";
 import { SwimlaneBoard } from "@/components/swimlane";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
 import { WorkItemList } from "@/components/work-item-list";
-import { dataApi, type WorkItem, type Workflow } from "@/lib/api";
+import { authApi, dataApi, type WorkItem, type Workflow } from "@/lib/api";
+import { isOverdue } from "@/lib/labels";
 import { projectTemplates } from "@/lib/work-templates";
 
-type MainView = "board" | "swimlane" | "list" | "cycles" | "flow" | "settings";
+type MainView = "board" | "swimlane" | "list" | "cycles" | "docs" | "flow" | "settings";
 
 const TABS: Array<[MainView, string]> = [
   ["board", "看板"],
   ["swimlane", "泳道"],
   ["list", "列表"],
   ["cycles", "迭代"],
+  ["docs", "文档"],
   ["flow", "流程图"],
   ["settings", "设置"],
 ];
@@ -47,10 +50,15 @@ function ProjectDetailInner() {
   const [table, setTable] = useState<{ template: string; type: string; name: string } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [peek, setPeek] = useState<WorkItem | null>(null);
+  const [viewFilter, setViewFilter] = useState<Record<string, unknown>>({});
+  const [viewName, setViewName] = useState("");
 
   const projectQ = useQuery({ queryKey: ["project", id], queryFn: () => dataApi.project(id) });
   const templates = useQuery({ queryKey: ["work-templates"], queryFn: dataApi.workTemplates });
   const workflows = useQuery({ queryKey: ["workflows"], queryFn: dataApi.workflows });
+  const me = useQuery({ queryKey: ["me"], queryFn: authApi.me });
+  const sprints = useQuery({ queryKey: ["sprints", id], queryFn: () => dataApi.sprints(id) });
+  const savedViews = useQuery({ queryKey: ["views", id], queryFn: () => dataApi.views(id) });
 
   const grouped = useMemo(
     () => projectTemplates(projectQ.data, templates.data ?? []),
@@ -86,7 +94,7 @@ function ProjectDetailInner() {
         type: table?.type,
         lane: view === "swimlane" ? lane : undefined,
       }),
-    enabled: view !== "settings" && view !== "cycles" && !!table,
+    enabled: view !== "settings" && view !== "cycles" && view !== "docs" && !!table,
   });
 
   const update = useMutation({
@@ -96,6 +104,22 @@ function ProjectDetailInner() {
       qc.invalidateQueries({ queryKey: ["project", id] });
       qc.invalidateQueries({ queryKey: ["projects"] });
     },
+  });
+  const pinView = useMutation({
+    mutationFn: () =>
+      dataApi.createView({
+        name: viewName.trim() || "未命名视图",
+        project_id: id,
+        filters: viewFilter,
+      }),
+    onSuccess: () => {
+      setViewName("");
+      qc.invalidateQueries({ queryKey: ["views", id] });
+    },
+  });
+  const dropView = useMutation({
+    mutationFn: (viewId: string) => dataApi.deleteView(viewId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["views", id] }),
   });
 
   const project = projectQ.data ?? board.data?.project;
@@ -120,7 +144,31 @@ function ProjectDetailInner() {
     router.replace(`/projects/${id}?tab=${next}`, { scroll: false });
   }
 
-  const showTypeBar = view !== "settings" && view !== "cycles";
+  const showTypeBar = view !== "settings" && view !== "cycles" && view !== "docs";
+  const activeSprint = (sprints.data ?? []).find((s) => s.status === "active");
+
+  function applyFilter(items: WorkItem[]) {
+    const open = Boolean(viewFilter.open);
+    const overdue = Boolean(viewFilter.overdue);
+    const mine = viewFilter.assignee === "me";
+    const sprint = viewFilter.sprint === "active" ? activeSprint?.id : (viewFilter.sprint_id as string | undefined);
+    return items.filter((item) => {
+      if (open && ["done", "cancelled", "launch", "wontfix"].includes(item.status)) return false;
+      if (overdue && !isOverdue(item)) return false;
+      if (mine && item.assignee_id !== me.data?.user.id) return false;
+      if (sprint && item.sprint_id !== sprint) return false;
+      return true;
+    });
+  }
+
+  const filteredColumns = columns.map((col) => ({ ...col, items: applyFilter(col.items) }));
+  const filteredList = applyFilter(listItems);
+  const filteredLanes = lanes.map((laneRow) => ({
+    ...laneRow,
+    items_by_status: Object.fromEntries(
+      Object.entries(laneRow.items_by_status).map(([k, items]) => [k, applyFilter(items)]),
+    ),
+  }));
 
   return (
     <div className="flex h-full flex-col">
@@ -138,6 +186,55 @@ function ProjectDetailInner() {
               )}
             </div>
             {project.description && <p className="mt-1 text-[12px] text-[#8b90a0]">{project.description}</p>}
+            {showTypeBar && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {(
+                  [
+                    ["全部", {}],
+                    ["我的未完成", { assignee: "me", open: true }],
+                    ["本迭代", { sprint: "active", open: true }],
+                    ["逾期", { overdue: true, open: true }],
+                  ] as Array<[string, Record<string, unknown>]>
+                ).map(([label, filters]) => {
+                  const active = JSON.stringify(viewFilter) === JSON.stringify(filters);
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => setViewFilter(filters)}
+                      className={`rounded-md px-2 py-0.5 text-[11px] ${active ? "bg-[#1a1d26] text-white" : "text-[#8b90a0] hover:text-white"}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+                {(savedViews.data ?? []).map((sv) => {
+                  const active = JSON.stringify(viewFilter) === JSON.stringify(sv.filters);
+                  return (
+                    <button
+                      key={sv.id}
+                      onClick={() => setViewFilter(sv.filters)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        dropView.mutate(sv.id);
+                      }}
+                      className={`rounded-md px-2 py-0.5 text-[11px] ${active ? "bg-[#1a1d26] text-white" : "text-[#8b90a0]"}`}
+                      title="右键删除"
+                    >
+                      {sv.name}
+                    </button>
+                  );
+                })}
+                <input
+                  value={viewName}
+                  onChange={(e) => setViewName(e.target.value)}
+                  placeholder="视图名"
+                  className="h-6 w-20 rounded border border-[#232633] bg-[#0e1014] px-1.5 text-[11px]"
+                />
+                <button onClick={() => pinView.mutate()} className="text-[11px] text-[#ffb088]">
+                  钉住
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {view === "swimlane" && (
@@ -222,13 +319,14 @@ function ProjectDetailInner() {
           </div>
         )}
         {view === "cycles" && <ProjectCycles projectId={project.id} onOpen={setPeek} />}
+        {view === "docs" && <ProjectDocs projectId={project.id} />}
         {showTypeBar && board.isLoading && (
           <div className="px-6 py-16 text-[13px] text-[#6d7280]">加载{table?.name ?? "看板"}…</div>
         )}
         {view === "board" && board.data && (
           <Kanban
             projectId={id}
-            columns={columns}
+            columns={filteredColumns}
             transitions={workflow?.transitions ?? []}
             onOpen={setPeek}
           />
@@ -236,8 +334,8 @@ function ProjectDetailInner() {
         {view === "swimlane" && board.data && (
           <SwimlaneBoard
             projectId={id}
-            columns={columns}
-            lanes={lanes}
+            columns={filteredColumns}
+            lanes={filteredLanes}
             transitions={workflow?.transitions ?? []}
             onOpen={setPeek}
           />
@@ -259,7 +357,7 @@ function ProjectDetailInner() {
         {view === "list" && board.data && (
           <div className="h-full overflow-y-auto">
             <WorkItemList
-              items={listItems}
+              items={filteredList}
               empty={`${table?.name ?? "工作表"}还是空的，可以新建一条`}
               onOpen={setPeek}
             />

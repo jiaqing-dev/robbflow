@@ -28,10 +28,20 @@ DEMO_PASSWORD = "robbflow"
 
 
 async def seed_if_empty(db: AsyncSession) -> None:
-    existing = await db.scalar(select(User).where(User.email == DEMO_EMAIL))
+    existing = await db.scalar(select(User.id).where(User.email == DEMO_EMAIL))
     if not existing:
         await seed_demo(db)
-    await ensure_v02(db)
+        await ensure_v02(db)
+        return
+    ready = await db.scalar(
+        select(WorkItemTypeSchema.id).where(WorkItemTypeSchema.key == "bug").limit(1)
+    )
+    if ready is None:
+        await ensure_v02(db)
+        return
+    for ws in await db.scalars(select(Workspace)):
+        await bootstrap_workspace(db, ws.id)
+    await db.commit()
 
 
 async def seed_demo(db: AsyncSession) -> User:

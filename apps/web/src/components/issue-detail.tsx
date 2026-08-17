@@ -15,7 +15,9 @@ import {
   type LayoutBlock,
   type TypeField,
 } from "@/lib/detail-layout";
-import { PRIORITY_LABEL, RELATION_LABEL, STATUS_LABEL, TYPE_LABEL } from "@/lib/labels";
+import { renderCommentHtml } from "@/lib/comment-md";
+import { parseGitUrl } from "@/lib/git-url";
+import { isOverdue, PRIORITY_LABEL, RELATION_LABEL, STATUS_LABEL, TYPE_LABEL } from "@/lib/labels";
 
 const REL_TYPES = Object.keys(RELATION_LABEL);
 const selectClass =
@@ -63,6 +65,21 @@ export function IssueDetail({
     enabled: !!item.data?.project_id,
   });
   const members = useQuery({ queryKey: ["members"], queryFn: dataApi.members });
+  const children = useQuery({
+    queryKey: ["children", issueKey],
+    queryFn: () => dataApi.children(issueKey),
+    enabled: !!item.data,
+  });
+  const gitLinks = useQuery({
+    queryKey: ["git-links", issueKey],
+    queryFn: () => dataApi.gitLinks(issueKey),
+    enabled: !!item.data,
+  });
+  const parent = useQuery({
+    queryKey: ["issue-parent", item.data?.parent_id],
+    queryFn: () => dataApi.workItem(item.data!.parent_id!),
+    enabled: !!item.data?.parent_id,
+  });
   const [title, setTitle] = useState<string | null>(null);
   const [description, setDescription] = useState<string | null>(null);
   const [body, setBody] = useState("");
@@ -70,6 +87,10 @@ export function IssueDetail({
   const [relTarget, setRelTarget] = useState("");
   const [relError, setRelError] = useState("");
   const [activityTab, setActivityTab] = useState<"comments" | "history">("comments");
+  const [childId, setChildId] = useState("");
+  const [gitUrl, setGitUrl] = useState("");
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [patchError, setPatchError] = useState("");
 
   useEffect(() => {
     setTitle(null);
@@ -82,19 +103,44 @@ export function IssueDetail({
   const patch = useMutation({
     mutationFn: (payload: Record<string, unknown>) => dataApi.updateWorkItem(issueKey, payload),
     onSuccess: (next) => {
+      setPatchError("");
       qc.setQueryData(["issue", issueKey], next);
       qc.invalidateQueries({ queryKey: ["board"] });
       qc.invalidateQueries({ queryKey: ["inbox"] });
       qc.invalidateQueries({ queryKey: ["my-work"] });
       qc.invalidateQueries({ queryKey: ["issue-activity", issueKey] });
     },
+    onError: (err: Error) => setPatchError(err.message),
   });
   const comment = useMutation({
     mutationFn: () => dataApi.addComment(issueKey, body),
     onSuccess: () => {
       setBody("");
       qc.invalidateQueries({ queryKey: ["comments", issueKey] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
+  });
+  const attachChild = useMutation({
+    mutationFn: (id: string) => dataApi.updateWorkItem(id, { parent_id: item.data?.id }),
+    onSuccess: () => {
+      setChildId("");
+      qc.invalidateQueries({ queryKey: ["children", issueKey] });
+    },
+  });
+  const addGit = useMutation({
+    mutationFn: () => {
+      const parsed = parseGitUrl(gitUrl);
+      if (!parsed) throw new Error("请粘贴 GitHub / GitLab 链接");
+      return dataApi.addGitLink(issueKey, parsed);
+    },
+    onSuccess: () => {
+      setGitUrl("");
+      qc.invalidateQueries({ queryKey: ["git-links", issueKey] });
+    },
+  });
+  const delGit = useMutation({
+    mutationFn: (id: string) => dataApi.deleteGitLink(issueKey, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["git-links", issueKey] }),
   });
   const addRel = useMutation({
     mutationFn: () => dataApi.addRelation(issueKey, relTarget, relType),
@@ -187,6 +233,15 @@ export function IssueDetail({
             {typeRow?.name ?? TYPE_LABEL[issue.type] ?? issue.type}
           </span>
           <span className="font-mono">{issue.key}</span>
+          {parent.data && (
+            <>
+              <span>/</span>
+              <Link href={`/issues/${parent.data.key}`} className="hover:text-white">
+                父项 {parent.data.key}
+              </Link>
+            </>
+          )}
+          {isOverdue(issue) && <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[11px] text-rose-300">逾期</span>}
           {variant === "page" && (
             <Link href="/workflows/types" className="ml-auto text-[11px] text-[#6d7280] hover:text-[#ffb088]">
               配置此类型详情页
@@ -246,6 +301,7 @@ export function IssueDetail({
             ))}
           </select>
         </div>
+        {patchError && <p className="mb-4 text-[12px] text-rose-400">{patchError}</p>}
 
         {layout.main.map((block) => (
           <div key={`${block.kind}:${block.key}`} className="mb-8">
@@ -265,7 +321,7 @@ export function IssueDetail({
               </MainSection>
             )}
             {block.kind === "system" && block.key === "docs" && (
-              <MainSection title="飞书文档">
+              <MainSection title="文档引用">
                 <FeishuDocs itemId={issue.id} />
               </MainSection>
             )}
@@ -360,17 +416,41 @@ export function IssueDetail({
                           <div className="mb-1 text-[11px] text-[#8b90a0]">
                             {c.author.name} · {new Date(c.created_at).toLocaleString()}
                           </div>
-                          <div className="text-[13px]">{c.body}</div>
+                          <div
+                            className="text-[13px] leading-6"
+                            dangerouslySetInnerHTML={{ __html: renderCommentHtml(c.body) }}
+                          />
                         </div>
                       ))}
                     </div>
                     <div className="mt-4">
                       <textarea
                         value={body}
-                        onChange={(e) => setBody(e.target.value)}
-                        placeholder="写下评论…"
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setBody(next);
+                          setMentionOpen(next.endsWith("@") || /@[\u4e00-\u9fa5A-Za-z0-9_.-]*$/.test(next));
+                        }}
+                        placeholder="写下评论… 支持 Markdown，用 @姓名 提醒成员"
                         className="h-24 w-full rounded-md border border-[#232633] bg-[#0e1014] p-3 text-[13px] outline-none focus:border-[#ff6a2b]"
                       />
+                      {mentionOpen && (
+                        <div className="mt-1 rounded-md border border-[#232633] bg-[#12141a] py-1">
+                          {(members.data ?? []).map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              className="block w-full px-3 py-1 text-left text-[12px] hover:bg-[#1a1d26]"
+                              onClick={() => {
+                                setBody((prev) => prev.replace(/@[\u4e00-\u9fa5A-Za-z0-9_.-]*$/, `@${m.name} `));
+                                setMentionOpen(false);
+                              }}
+                            >
+                              @{m.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <button
                         disabled={!body.trim() || comment.isPending}
                         onClick={() => comment.mutate()}
@@ -400,6 +480,74 @@ export function IssueDetail({
             )}
           </div>
         ))}
+        <div className="mb-8">
+          <MainSection title="子工作项">
+            <div className="mb-3 space-y-1">
+              {(children.data ?? []).map((child) => (
+                <Link
+                  key={child.id}
+                  href={`/issues/${child.key}`}
+                  className="flex items-center gap-2 rounded-md border border-[#232633] px-3 py-1.5 text-[12px] hover:bg-[#12141a]"
+                >
+                  <span className="font-mono text-[#8b90a0]">{child.key}</span>
+                  <span className="truncate">{child.title}</span>
+                  <span className="ml-auto text-[#6d7280]">{STATUS_LABEL[child.status] ?? child.status}</span>
+                </Link>
+              ))}
+              {(children.data ?? []).length === 0 && (
+                <p className="text-[12px] text-[#6d7280]">还没有子项。把已有工作项挂到这里即可。</p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <WorkItemPicker excludeId={issue.id} value={childId} onChange={setChildId} />
+              <button
+                disabled={!childId || attachChild.isPending}
+                onClick={() => attachChild.mutate(childId)}
+                className="h-[34px] shrink-0 rounded-md bg-[#ff6a2b] px-3 text-[12px] text-black disabled:opacity-40"
+              >
+                挂为子项
+              </button>
+            </div>
+          </MainSection>
+        </div>
+        <div className="mb-8">
+          <MainSection title="Git 关联">
+            <div className="mb-3 space-y-2">
+              {(gitLinks.data ?? []).map((g) => (
+                <div key={g.id} className="flex items-center gap-2 rounded-md border border-[#232633] px-3 py-2 text-[12px]">
+                  <span className="rounded bg-[#1a1d26] px-1.5 py-0.5 text-[10px] text-[#ffb088]">{g.provider}</span>
+                  <a href={g.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate hover:text-white">
+                    {g.repo}
+                    {g.ref ? ` @ ${g.ref}` : ""}
+                  </a>
+                  <button onClick={() => delGit.mutate(g.id)} className="text-[#6d7280]">
+                    移除
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={gitUrl}
+                onChange={(e) => setGitUrl(e.target.value)}
+                placeholder="https://github.com/org/repo/pull/12"
+                className="h-[34px] min-w-0 flex-1 rounded-md border border-[#232633] bg-[#0e1014] px-3 text-[12px] outline-none focus:border-[#ff6a2b]"
+              />
+              <button
+                disabled={!gitUrl.trim() || addGit.isPending}
+                onClick={() => addGit.mutate()}
+                className="h-[34px] shrink-0 rounded-md bg-[#ff6a2b] px-3 text-[12px] text-black disabled:opacity-40"
+              >
+                关联
+              </button>
+            </div>
+            {addGit.isError && (
+              <p className="mt-2 text-[12px] text-rose-400">
+                {addGit.error instanceof Error ? addGit.error.message : "无法关联"}
+              </p>
+            )}
+          </MainSection>
+        </div>
       </section>
       <aside className={`shrink-0 overflow-y-auto border-l border-[#232633] p-4 ${variant === "peek" ? "w-[260px]" : "w-[320px]"}`}>
         <div className="mb-3 text-[11px] tracking-wide text-[#6d7280]">详细信息</div>
@@ -571,6 +719,14 @@ function SidebarBlock({ block, ctx }: { block: LayoutBlock; ctx: BlockCtx }) {
     case "dates":
       return (
         <div className="mb-3 space-y-2">
+          <SideField label="截止日期">
+            <input
+              type="datetime-local"
+              value={toLocalInput(issue.due_at)}
+              onChange={(e) => patch({ due_at: e.target.value ? new Date(e.target.value).toISOString() : null })}
+              className={selectClass}
+            />
+          </SideField>
           <SideField label="创建">{new Date(issue.created_at).toLocaleString()}</SideField>
           <SideField label="更新">{new Date(issue.updated_at).toLocaleString()}</SideField>
         </div>
@@ -587,4 +743,12 @@ function SideField({ label, children }: { label: string; children: React.ReactNo
       <div className="text-[13px]">{children}</div>
     </div>
   );
+}
+
+function toLocalInput(iso: string | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

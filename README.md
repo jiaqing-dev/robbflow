@@ -132,7 +132,7 @@ cp .env.example .env
 | `DATABASE_URL` | 默认 `postgresql+asyncpg://robbflow:robbflow@localhost:15432/robbflow` |
 | `REDIS_URL` | 默认 `redis://localhost:16379/0` |
 | `SEED` | 默认 `true`，API 启动时写入演示数据 |
-| `NEXT_PUBLIC_API_URL` | 前端请求的 API，默认 `http://localhost:8000` |
+| `NEXT_PUBLIC_API_URL` | 前端请求的 API，默认 `http://127.0.0.1:8000` |
 | `JWT_SECRET` | 开发可沿用示例值，生产必须更换 |
 
 ### 3. 安装依赖
@@ -167,7 +167,7 @@ pnpm --filter @robbflow/web dev
 
 API 启动时会 `create_all` 并补齐新列；`SEED=true` 时自动写入演示工作区。
 
-打开 http://localhost:3000 登录：
+打开 http://127.0.0.1:3000 登录：
 
 ```text
 demo@robbflow.dev / robbflow
@@ -209,7 +209,8 @@ make web
 ```
 - **Next 报 Node 版本过低**：确认 `node -v` 为 20+，Homebrew 用户检查 PATH 是否指向 `node@22`。
 - **API 连不上数据库**：先 `docker compose ps`，等 Postgres `healthy` 后再 `make api`。
-- **前端接口 401 / 连错地址**：检查 `NEXT_PUBLIC_API_URL`，改完需重启 `make web`。
+- **登录失败 / Failed to fetch**：前端在 3000，API 必须单独开着。先 `make infra`，再 `make api`，最后 `make web`。浏览器请访问 http://127.0.0.1:3000（不要只开前端）。API 地址用 `127.0.0.1` 而不是 `localhost`，避免 macOS 把 localhost 解析到 IPv6。
+- **前端接口 401 / 连错地址**：检查 `NEXT_PUBLIC_API_URL`（默认 `http://127.0.0.1:8000`），改完需重启 `make web`。
 
 ## 许可与商业模式
 

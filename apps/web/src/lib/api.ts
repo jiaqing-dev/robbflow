@@ -51,6 +51,8 @@ export type WorkItem = {
   properties: Record<string, unknown>;
   sprint_id: string | null;
   milestone_id: string | null;
+  due_at: string | null;
+  start_at: string | null;
   created_at: string;
   updated_at: string;
   assignee: User | null;
@@ -106,6 +108,8 @@ export type WorkflowTransition = {
   from_state: string;
   to_state: string;
   name: string | null;
+  require_role?: string | null;
+  require_approver?: boolean;
 };
 
 export type Workflow = {
@@ -160,6 +164,62 @@ export type Sprint = {
   end_at: string | null;
   status: string;
   item_count: number;
+  done_count: number;
+  progress: number;
+};
+
+export type Notification = {
+  id: string;
+  title: string;
+  body: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  payload: Record<string, unknown>;
+  read_at: string | null;
+  created_at: string;
+};
+
+export type SavedView = {
+  id: string;
+  name: string;
+  project_id: string | null;
+  filters: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ProjectDocument = {
+  id: string;
+  project_id: string | null;
+  work_item_id: string | null;
+  provider: string;
+  kind: string;
+  title: string;
+  url: string | null;
+  mime: string | null;
+  external_id: string | null;
+  body: string | null;
+  created_at: string;
+};
+
+export type GitLink = {
+  id: string;
+  provider: string;
+  repo: string;
+  ref: string;
+  url: string;
+  kind: string;
+};
+
+export type IntegrationRow = {
+  key: string;
+  name: string;
+  status: string;
+  enabled: boolean;
+};
+
+export type IdentityBinding = {
+  provider: string;
+  external_id: string;
 };
 
 export type Milestone = {
@@ -218,8 +278,11 @@ export type BoardPayload = {
   };
 };
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const RAW_API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const API = RAW_API.replace("://localhost", "://127.0.0.1");
 const TOKEN_KEY = "rf_token";
+const API_DOWN =
+  "无法连接 API。请在仓库根目录另开终端运行：make api（http://127.0.0.1:8000）";
 
 export function getToken() {
   if (typeof window === "undefined") return null;
@@ -245,7 +308,17 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   headers.set("Content-Type", "application/json");
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(`${API}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}`, {
+      ...init,
+      headers,
+      signal: init.signal ?? AbortSignal.timeout(8000),
+    });
+  } catch (err) {
+    const timedOut = err instanceof DOMException && err.name === "TimeoutError";
+    throw new ApiError(0, timedOut ? `请求超时。${API_DOWN}` : API_DOWN);
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -271,7 +344,7 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  me: () => api<{ user: User; workspace: Workspace }>("/auth/me"),
+  me: () => api<{ user: User; workspace: Workspace; role: string }>("/auth/me"),
 };
 
 export const dataApi = {
@@ -365,7 +438,49 @@ export const dataApi = {
   plan: (prompt: string, project_id?: string, apply = false) =>
     api<{
       summary: string;
+      source: string;
       items: { type: string; title: string; priority: string }[];
       created: WorkItem[];
     }>("/agent/plan", { method: "POST", body: JSON.stringify({ prompt, project_id, apply }) }),
+  notifications: (unread = false) =>
+    api<Notification[]>(`/notifications${unread ? "?unread=true" : ""}`),
+  readNotification: (id: string) =>
+    api<{ ok: boolean }>(`/notifications/${id}/read`, { method: "POST" }),
+  readAllNotifications: () => api<{ ok: boolean }>("/notifications/read-all", { method: "POST" }),
+  views: (projectId?: string) =>
+    api<SavedView[]>(`/views${projectId ? `?project_id=${projectId}` : ""}`),
+  createView: (body: { name: string; project_id?: string; filters: Record<string, unknown> }) =>
+    api<SavedView>("/views", { method: "POST", body: JSON.stringify(body) }),
+  deleteView: (id: string) => api<{ ok: boolean }>(`/views/${id}`, { method: "DELETE" }),
+  documents: (params: Record<string, string> = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return api<ProjectDocument[]>(`/documents${q ? `?${q}` : ""}`);
+  },
+  createDocument: (body: Record<string, unknown>) =>
+    api<ProjectDocument>("/documents", { method: "POST", body: JSON.stringify(body) }),
+  deleteDocument: (id: string) => api<{ ok: boolean }>(`/documents/${id}`, { method: "DELETE" }),
+  children: (id: string) => api<WorkItem[]>(`/work-items/${id}/children`),
+  gitLinks: (id: string) => api<GitLink[]>(`/work-items/${id}/git-links`),
+  addGitLink: (id: string, body: Partial<GitLink> & { url: string; repo: string }) =>
+    api<GitLink>(`/work-items/${id}/git-links`, { method: "POST", body: JSON.stringify(body) }),
+  deleteGitLink: (id: string, linkId: string) =>
+    api<{ ok: boolean }>(`/work-items/${id}/git-links/${linkId}`, { method: "DELETE" }),
+  integrations: () => api<IntegrationRow[]>("/integrations"),
+  saveIntegration: (provider: string, config: Record<string, unknown>, enabled = true) =>
+    api<{ ok: boolean; connected: boolean; provider: string }>(`/integrations/${provider}`, {
+      method: "PUT",
+      body: JSON.stringify({ provider, config, enabled }),
+    }),
+  testIntegration: (provider: string) =>
+    api<{ ok: boolean }>(`/integrations/${provider}/test`, { method: "POST" }),
+  bindings: () => api<IdentityBinding[]>("/integrations/bindings"),
+  bindIdentity: (provider: string, external_id: string) =>
+    api<IdentityBinding>("/integrations/bindings", {
+      method: "POST",
+      body: JSON.stringify({ provider, external_id }),
+    }),
+  oidc: (provider: string) =>
+    api<{ status: string; provider: string; hint: string; authorize_url: string | null }>(
+      `/integrations/oidc/${provider}`,
+    ),
 };

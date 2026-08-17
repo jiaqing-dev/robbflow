@@ -6,7 +6,12 @@ from robbflow_workflow.engine import (
     engineering_workflow,
     product_workflow,
     sequential_transitions,
+    ticket_workflow,
+)
+from robbflow_workflow.engine import (
     test_case_workflow as case_workflow,
+)
+from robbflow_workflow.engine import (
     test_task_workflow as task_workflow,
 )
 
@@ -111,4 +116,15 @@ def test_test_task_diagram_keeps_block_branch():
     assert ("in_progress", "blocked") in pairs
     assert ("blocked", "in_progress") not in pairs
     assert ("pending", "cancelled") not in pairs
+
+
+def test_ticket_approval_edges():
+    wf = ticket_workflow()
+    assert wf.initial_state() == "submitted"
+    edge = wf.find_transition("pending_approval", "processing")
+    assert edge is not None
+    assert edge.require_role == "admin"
+    close = wf.find_transition("processing", "done")
+    assert close is not None
+    assert close.require_approver is True
 

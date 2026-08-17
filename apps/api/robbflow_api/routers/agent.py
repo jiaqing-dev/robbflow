@@ -84,6 +84,7 @@ async def plan(
         await db.commit()
     return {
         "summary": result.summary,
+        "source": result.source,
         "items": [{"type": i.type, "title": i.title, "priority": i.priority} for i in result.items],
         "created": created,
     }

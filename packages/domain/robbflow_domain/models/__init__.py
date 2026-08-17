@@ -1,4 +1,12 @@
 from robbflow_domain.models.base import Base
+from robbflow_domain.models.collab import (
+    Document,
+    GitLink,
+    IdentityBinding,
+    IntegrationCredential,
+    Notification,
+    SavedView,
+)
 from robbflow_domain.models.identity import (
     Membership,
     Organization,
@@ -39,6 +47,12 @@ __all__ = [
     "Comment",
     "Activity",
     "DomainEvent",
+    "Notification",
+    "SavedView",
+    "Document",
+    "GitLink",
+    "IdentityBinding",
+    "IntegrationCredential",
     "WorkItemTypeSchema",
     "Workflow",
     "WorkflowState",

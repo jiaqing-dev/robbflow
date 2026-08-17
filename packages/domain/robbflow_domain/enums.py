@@ -15,6 +15,7 @@ class WorkItemType(StrEnum):
     TEST_CASE = "test_case"
     TEST_TASK = "test_task"
     ACTION = "action"
+    TICKET = "ticket"
 
 
 class Priority(StrEnum):
@@ -63,3 +64,5 @@ class EventType(StrEnum):
     USER_JOINED = "UserJoined"
     WORKFLOW_UPDATED = "WorkflowUpdated"
     SPRINT_UPDATED = "SprintUpdated"
+    NOTIFICATION = "Notification"
+    DOCUMENT_CREATED = "DocumentCreated"

@@ -28,6 +28,8 @@ class Transition:
     from_state: str
     to_state: str
     name: str | None = None
+    require_role: str | None = None
+    require_approver: bool = False
 
 
 @dataclass
@@ -39,6 +41,12 @@ class WorkflowDefinition:
 
     def state_map(self) -> dict[str, State]:
         return {s.key: s for s in self.states}
+
+    def find_transition(self, from_state: str, to_state: str) -> Transition | None:
+        return next(
+            (t for t in self.transitions if t.from_state == from_state and t.to_state == to_state),
+            None,
+        )
 
     def can_transition(self, from_state: str, to_state: str) -> bool:
         if from_state == to_state:
@@ -85,7 +93,13 @@ def definition_from_records(
         for i, s in enumerate(states)
     ]
     parsed_transitions = [
-        Transition(from_state=t["from_state"], to_state=t["to_state"], name=t.get("name"))
+        Transition(
+            from_state=t["from_state"],
+            to_state=t["to_state"],
+            name=t.get("name"),
+            require_role=t.get("require_role"),
+            require_approver=bool(t.get("require_approver")),
+        )
         for t in transitions
     ]
     return WorkflowDefinition(
@@ -204,12 +218,33 @@ def test_task_workflow() -> WorkflowDefinition:
     return WorkflowDefinition("test_task", "测试任务流程", states, trans)
 
 
+def ticket_workflow() -> WorkflowDefinition:
+    states = [
+        State("submitted", "已申请", StateCategory.UNSTARTED, "#94a3b8", 0),
+        State("pending_approval", "待审批", StateCategory.STARTED, "#f59e0b", 1),
+        State("processing", "处理中", StateCategory.STARTED, "#3b82f6", 2),
+        State("done", "已关闭", StateCategory.COMPLETED, "#22c55e", 3),
+        State("cancelled", "已拒绝", StateCategory.CANCELLED, "#78716c", 4),
+    ]
+    trans = [
+        Transition("submitted", "pending_approval", "提交审批"),
+        Transition("pending_approval", "processing", "通过", require_role="admin"),
+        Transition("pending_approval", "cancelled", "拒绝", require_role="admin"),
+        Transition("pending_approval", "submitted", "退回", require_role="admin"),
+        Transition("processing", "done", "关闭", require_approver=True),
+        Transition("processing", "cancelled", "取消"),
+        Transition("cancelled", "submitted", "重开"),
+    ]
+    return WorkflowDefinition("ticket", "事务/工单", states, trans)
+
+
 WORKFLOW_PRESETS: dict[str, WorkflowDefinition] = {
     "engineering": engineering_workflow(),
     "product": product_workflow(),
     "bug": bug_workflow(),
     "test_case": test_case_workflow(),
     "test_task": test_task_workflow(),
+    "ticket": ticket_workflow(),
 }
 
 DEFAULT_WORKFLOW = engineering_workflow()

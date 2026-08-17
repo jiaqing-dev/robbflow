@@ -85,5 +85,7 @@ class WorkflowTransition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     from_state: Mapped[str] = mapped_column(String(64))
     to_state: Mapped[str] = mapped_column(String(64))
     name: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    require_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    require_approver: Mapped[bool] = mapped_column(Boolean, default=False)
 
     workflow: Mapped[Workflow] = relationship(back_populates="transitions")

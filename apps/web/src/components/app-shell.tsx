@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Bell,
   FolderKanban,
   Inbox,
   Map,
@@ -16,6 +15,7 @@ import {
 
 import { CommandPalette } from "@/components/command-palette";
 import { CreateIssueDialog } from "@/components/create-issue-dialog";
+import { NotificationBell } from "@/components/notification-bell";
 import { ApiError, authApi, getToken, setToken, type User, type Workspace } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
@@ -33,6 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<{ user: User; workspace: Workspace } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [apiError, setApiError] = useState("");
 
   useEffect(() => {
     if (!getToken()) {
@@ -41,12 +42,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     authApi
       .me()
-      .then(setMe)
+      .then((data) => {
+        setMe(data);
+        setApiError("");
+      })
       .catch((err: unknown) => {
         if (err instanceof ApiError && err.status === 401) {
           setToken(null);
           router.replace("/login");
+          return;
         }
+        setApiError(err instanceof Error ? err.message : "无法连接 API");
       });
   }, [router]);
 
@@ -121,12 +127,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {me?.user.name.slice(0, 1) ?? "R"}
             </div>
             <span className="truncate">{me?.user.name ?? "…"}</span>
-            <Bell size={13} className="ml-auto" />
+            <NotificationBell />
             <Sparkles size={13} />
           </div>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 overflow-hidden">{children}</main>
+      <main className="relative min-w-0 flex-1 overflow-hidden">
+        {apiError && (
+          <div className="border-b border-rose-500/40 bg-rose-950/40 px-4 py-2 text-[12px] text-rose-300">
+            {apiError}
+          </div>
+        )}
+        {children}
+      </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <CreateIssueDialog open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>

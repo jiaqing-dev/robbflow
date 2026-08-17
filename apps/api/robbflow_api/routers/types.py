@@ -8,6 +8,7 @@ from robbflow_api.bootstrap import bootstrap_workspace
 from robbflow_api.db import get_db
 from robbflow_api.deps import CurrentContext, get_current
 from robbflow_api.schemas import TypeGraphPut, WorkItemTypeIn, WorkItemTypeOut
+from robbflow_api.services.rbac import require_admin
 from robbflow_domain.models import WorkItemTypeSchema
 
 router = APIRouter(prefix="/work-item-types", tags=["work-item-types"])
@@ -66,6 +67,7 @@ async def create_type(
     ctx: CurrentContext = Depends(get_current),
     db: AsyncSession = Depends(get_db),
 ) -> WorkItemTypeSchema:
+    require_admin(ctx.role)
     key = (
         body.key or "".join(ch.lower() if ch.isalnum() else "_" for ch in body.name).strip("_")[:32]
     )
@@ -104,6 +106,7 @@ async def save_type_graph(
     ctx: CurrentContext = Depends(get_current),
     db: AsyncSession = Depends(get_db),
 ) -> list[WorkItemTypeSchema]:
+    require_admin(ctx.role)
     rows = {
         row.id: row
         for row in await db.scalars(
@@ -168,6 +171,7 @@ async def update_type(
     ctx: CurrentContext = Depends(get_current),
     db: AsyncSession = Depends(get_db),
 ) -> WorkItemTypeSchema:
+    require_admin(ctx.role)
     row = await db.scalar(
         select(WorkItemTypeSchema).where(
             WorkItemTypeSchema.id == type_id,

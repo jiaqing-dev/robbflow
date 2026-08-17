@@ -6,7 +6,7 @@ import { useState } from "react";
 import { ApiError, type BoardColumn, type WorkItem } from "@/lib/api";
 import { dataApi } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { PRIORITY_LABEL, TYPE_LABEL, typeColor } from "@/lib/labels";
+import { dueLabel, isOverdue, PRIORITY_LABEL, TYPE_LABEL, typeColor } from "@/lib/labels";
 
 export function Kanban({
   projectId,
@@ -155,7 +155,10 @@ function KanbanCard({
         onDragStart();
       }}
       onDragEnd={onDragEnd}
-      className="cursor-grab rounded-md border border-[#232633] bg-[#12141a] p-3 hover:border-[#3a3f52] active:cursor-grabbing"
+      className={cn(
+        "cursor-grab rounded-md border bg-[#12141a] p-3 hover:border-[#3a3f52] active:cursor-grabbing",
+        isOverdue(item) ? "border-rose-500/50" : "border-[#232633]",
+      )}
     >
       <div className="mb-2 flex items-center justify-between">
         <button
@@ -177,8 +180,8 @@ function KanbanCard({
         {item.title}
       </button>
       <div className="mt-3 flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wide text-[#6d7280]">
-          {PRIORITY_LABEL[item.priority] ?? item.priority}
+        <span className={cn("text-[10px] tracking-wide", isOverdue(item) ? "text-rose-400" : "text-[#6d7280]")}>
+          {isOverdue(item) ? `逾期 ${dueLabel(item.due_at)}` : PRIORITY_LABEL[item.priority] ?? item.priority}
         </span>
         <select
           value={item.status}

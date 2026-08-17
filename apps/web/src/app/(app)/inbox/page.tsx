@@ -18,7 +18,7 @@ export default function InboxPage() {
         <header className="sticky top-0 z-10 flex items-end justify-between border-b border-[#232633] bg-[#0b0c0e]/90 px-6 py-4 backdrop-blur">
           <div>
             <h1 className="text-[18px] font-semibold tracking-tight">收件箱</h1>
-            <p className="text-[12px] text-[#8b90a0]">需要你处理或尚未指派的工作对象</p>
+            <p className="text-[12px] text-[#8b90a0]">需要处理或尚未指派的工作项。指派、评论、状态变更的提醒在左下角铃铛。</p>
           </div>
         </header>
         {items.isLoading ? (

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from robbflow_api.auth import create_access_token, hash_password, verify_password
+from robbflow_api.auth import create_access_token, hash_password_async, verify_password_async
 from robbflow_api.bootstrap import bootstrap_workspace
 from robbflow_api.db import get_db
 from robbflow_api.deps import CurrentContext, get_current
@@ -28,7 +28,7 @@ async def register(body: RegisterIn, db: AsyncSession = Depends(get_db)) -> Toke
     user = User(
         email=body.email.lower(),
         name=body.name,
-        password_hash=hash_password(body.password),
+        password_hash=await hash_password_async(body.password),
     )
     org = Organization(slug=_slugify(body.workspace_name), name=body.workspace_name)
     workspace = Workspace(organization=org, slug="main", name=body.workspace_name)
@@ -59,8 +59,8 @@ async def register(body: RegisterIn, db: AsyncSession = Depends(get_db)) -> Toke
 @router.post("/login", response_model=TokenOut)
 async def login(body: LoginIn, db: AsyncSession = Depends(get_db)) -> TokenOut:
     user = await db.scalar(select(User).where(User.email == body.email.lower()))
-    if user is None or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
+    if user is None or not await verify_password_async(body.password, user.password_hash):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "邮箱或密码不正确")
     membership = await db.scalar(select(Membership).where(Membership.user_id == user.id))
     if membership is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No workspace")
@@ -70,5 +70,7 @@ async def login(body: LoginIn, db: AsyncSession = Depends(get_db)) -> TokenOut:
 @router.get("/me", response_model=MeOut)
 async def me(ctx: CurrentContext = Depends(get_current)) -> MeOut:
     return MeOut(
-        user=UserOut.model_validate(ctx.user), workspace=WorkspaceOut.model_validate(ctx.workspace)
+        user=UserOut.model_validate(ctx.user),
+        workspace=WorkspaceOut.model_validate(ctx.workspace),
+        role=ctx.role,
     )

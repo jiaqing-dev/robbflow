@@ -126,7 +126,7 @@ def test_feishu_doc_link(client: TestClient, headers: dict[str, str]):
     rejected = client.post(
         f"/work-items/{item['id']}/links",
         headers=headers,
-        json={"url": "https://notion.so/page"},
+        json={"url": "不是链接"},
     )
     assert rejected.status_code == 422
 

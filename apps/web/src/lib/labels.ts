@@ -19,6 +19,9 @@ export const STATUS_LABEL: Record<string, string> = {
   deprecated: "已废弃",
   pending: "待提测",
   blocked: "阻塞",
+  submitted: "已申请",
+  pending_approval: "待审批",
+  processing: "处理中",
 };
 
 export const TYPE_LABEL: Record<string, string> = {
@@ -33,6 +36,7 @@ export const TYPE_LABEL: Record<string, string> = {
   test_case: "用例",
   test_task: "测试任务",
   action: "行动项",
+  ticket: "工单",
 };
 
 export const PRIORITY_LABEL: Record<string, string> = {
@@ -85,7 +89,34 @@ export function typeColor(type: string) {
       return "text-amber-400";
     case "improvement":
       return "text-emerald-400";
+    case "ticket":
+      return "text-orange-400";
     default:
       return "text-zinc-400";
   }
 }
+
+const DONE = new Set(["done", "cancelled", "launch", "wontfix"]);
+
+export function isOverdue(item: { due_at?: string | null; status: string }) {
+  if (!item.due_at || DONE.has(item.status)) return false;
+  return new Date(item.due_at).getTime() < Date.now();
+}
+
+export function dueLabel(iso: string | null | undefined) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString();
+}
+
+export const PROVIDER_LABEL: Record<string, string> = {
+  feishu: "飞书",
+  dingtalk: "钉钉",
+  wecom: "企微",
+  url: "链接",
+  note: "短文",
+  s3: "对象存储",
+  webdav: "网盘",
+  upload: "附件",
+  github: "GitHub",
+  gitlab: "GitLab",
+};

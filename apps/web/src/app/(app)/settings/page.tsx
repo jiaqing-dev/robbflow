@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { dataApi } from "@/lib/api";
+import { IntegrationSettings } from "@/components/integration-settings";
 
 export default function SettingsPage() {
   const qc = useQueryClient();
@@ -25,7 +26,7 @@ export default function SettingsPage() {
   return (
     <div className="h-full overflow-y-auto px-6 py-5">
       <h1 className="mb-1 text-[18px] font-semibold tracking-tight">设置</h1>
-      <p className="mb-8 text-[12px] text-[#8b90a0]">流程设计 · 工作项类型 · AI 助手</p>
+      <p className="mb-8 text-[12px] text-[#8b90a0]">流程设计 · 工作项类型 · 办公集成 · AI 助手</p>
 
       <section className="mb-10 max-w-3xl">
         <h2 className="mb-3 text-[13px] font-medium">流程与演示</h2>
@@ -87,8 +88,15 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <section className="mb-10 max-w-3xl">
+        <IntegrationSettings />
+      </section>
+
       <section className="max-w-2xl">
-        <h2 className="mb-2 text-[13px] font-medium">AI 助手（规则拆解）</h2>
+        <h2 className="mb-2 text-[13px] font-medium">AI 助手</h2>
+        <p className="mb-2 text-[12px] text-[#8b90a0]">
+          未配置 ROBBFLOW_LLM_URL 时用规则拆解；配了密钥则走 LLM，失败自动回退。
+        </p>
         <select
           value={projectId}
           onChange={(e) => setProjectId(e.target.value)}
@@ -113,9 +121,14 @@ export default function SettingsPage() {
           拆解并创建
         </button>
         {plan.data && (
-          <pre className="mt-3 overflow-auto rounded-md border border-[#232633] bg-[#0e1014] p-3 text-[11px] text-[#c4c8d4]">
-            {JSON.stringify(plan.data, null, 2)}
-          </pre>
+          <div className="mt-3">
+            <p className="mb-1 text-[11px] text-[#6d7280]">
+              来源：{plan.data.source === "llm" ? "LLM" : "启发式规则"}
+            </p>
+            <pre className="overflow-auto rounded-md border border-[#232633] bg-[#0e1014] p-3 text-[11px] text-[#c4c8d4]">
+              {JSON.stringify(plan.data, null, 2)}
+            </pre>
+          </div>
         )}
       </section>
     </div>

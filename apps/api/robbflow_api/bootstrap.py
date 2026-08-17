@@ -282,6 +282,26 @@ TYPE_SPECS: list[dict] = [
         "inputs": [_port(PROJECT_TYPE_KEY, "belongs_to", "归属项目")],
         "outputs": [_port("task", "implements", "应对任务")],
     },
+    {
+        "key": "ticket",
+        "name": "工单",
+        "icon": "inbox",
+        "color": "#fb923c",
+        "workflow": "ticket",
+        "description": "申请 → 审批 → 处理 → 关闭。",
+        "layout_x": 1040.0,
+        "layout_y": 400.0,
+        "fields": [
+            {
+                "key": "category",
+                "name": "类别",
+                "type": "select",
+                "options": ["IT", "行政", "采购", "其他"],
+            },
+        ],
+        "inputs": [_port(PROJECT_TYPE_KEY, "belongs_to", "归属项目")],
+        "outputs": [_port("task", "implements", "落地任务")],
+    },
 ]
 
 
@@ -416,7 +436,15 @@ async def bootstrap_workspace(db: AsyncSession, workspace_id: UUID) -> dict[str,
 
 
 async def _remap_legacy_statuses(db: AsyncSession, workspace_id: UUID) -> None:
-    items = await db.scalars(select(WorkItem).where(WorkItem.workspace_id == workspace_id))
+    legacy = {old for mapping in LEGACY_STATUS_MAP.values() for old in mapping}
+    if not legacy:
+        return
+    items = await db.scalars(
+        select(WorkItem).where(
+            WorkItem.workspace_id == workspace_id,
+            WorkItem.status.in_(legacy),
+        )
+    )
     for item in items:
         mapping = LEGACY_STATUS_MAP.get(item.type)
         if not mapping:

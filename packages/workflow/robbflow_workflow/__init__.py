@@ -15,6 +15,7 @@ from robbflow_workflow.engine import (
     sequential_transitions,
     test_case_workflow,
     test_task_workflow,
+    ticket_workflow,
 )
 
 __all__ = [
@@ -32,6 +33,7 @@ __all__ = [
     "is_diagram_transition",
     "product_workflow",
     "sequential_transitions",
+    "ticket_workflow",
     "test_case_workflow",
     "test_task_workflow",
 ]

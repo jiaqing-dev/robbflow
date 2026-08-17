@@ -120,7 +120,7 @@ export default function WorkflowEditorPage() {
     if (current.transitions.some((t) => t.from_state === from && t.to_state === to)) return;
     setDraft({
       states: current.states,
-      transitions: [...current.transitions, { from_state: from, to_state: to, name: "前进" }],
+      transitions: [...current.transitions, { from_state: from, to_state: to, name: "前进", require_role: null, require_approver: false }],
     });
     setTab("links");
   }
@@ -260,6 +260,8 @@ export default function WorkflowEditorPage() {
                   <th className="px-3 py-2 font-normal">从</th>
                   <th className="px-3 py-2 font-normal">动作</th>
                   <th className="px-3 py-2 font-normal">到</th>
+                  <th className="px-3 py-2 font-normal">谁能过</th>
+                  <th className="px-3 py-2 font-normal">负责人</th>
                   <th className="px-3 py-2 font-normal">图上</th>
                   <th className="px-3 py-2 font-normal" />
                 </tr>
@@ -319,6 +321,36 @@ export default function WorkflowEditorPage() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <select
+                        value={t.require_role ?? ""}
+                        onChange={(e) => {
+                          const next = current.transitions.map((row, idx) =>
+                            idx === i ? { ...row, require_role: e.target.value || null } : row,
+                          );
+                          setDraft({ states: current.states, transitions: next });
+                        }}
+                        className="bg-transparent"
+                      >
+                        <option value="">任何人</option>
+                        <option value="member">成员</option>
+                        <option value="admin">管理员</option>
+                        <option value="owner">所有者</option>
+                        <option value="assignee">负责人</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(t.require_approver)}
+                        onChange={(e) => {
+                          const next = current.transitions.map((row, idx) =>
+                            idx === i ? { ...row, require_approver: e.target.checked } : row,
+                          );
+                          setDraft({ states: current.states, transitions: next });
+                        }}
+                      />
                     </td>
                     <td className="px-3 py-1.5 text-[11px] text-[#6d7280]">
                       {isDiagramTransition(t, current.states) ? "显示" : "不画"}

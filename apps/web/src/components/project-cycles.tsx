@@ -93,8 +93,52 @@ export function ProjectCycles({
                 <span className="text-[11px] text-[#8b90a0]">{SPRINT_STATUS_LABEL[s.status] ?? s.status}</span>
               </div>
               <p className="mb-2 text-[12px] text-[#8b90a0]">{s.goal || "暂无目标"}</p>
+              <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-[#1a1d26]">
+                <div
+                  className="h-full bg-[#22c55e]"
+                  style={{ width: `${Math.round((s.progress ?? 0) * 100)}%` }}
+                />
+              </div>
+              <div className="mb-2 grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  defaultValue={s.start_at ? s.start_at.slice(0, 10) : ""}
+                  onBlur={(e) =>
+                    dataApi
+                      .updateSprint(s.id, {
+                        project_id: s.project_id,
+                        name: s.name,
+                        goal: s.goal,
+                        start_at: e.target.value ? `${e.target.value}T00:00:00Z` : null,
+                        end_at: s.end_at,
+                        status: s.status,
+                      })
+                      .then(() => qc.invalidateQueries({ queryKey: ["sprints"] }))
+                  }
+                  className="rounded border border-[#232633] bg-[#0b0c0e] px-2 py-1 text-[11px]"
+                />
+                <input
+                  type="date"
+                  defaultValue={s.end_at ? s.end_at.slice(0, 10) : ""}
+                  onBlur={(e) =>
+                    dataApi
+                      .updateSprint(s.id, {
+                        project_id: s.project_id,
+                        name: s.name,
+                        goal: s.goal,
+                        start_at: s.start_at,
+                        end_at: e.target.value ? `${e.target.value}T23:59:00Z` : null,
+                        status: s.status,
+                      })
+                      .then(() => qc.invalidateQueries({ queryKey: ["sprints"] }))
+                  }
+                  className="rounded border border-[#232633] bg-[#0b0c0e] px-2 py-1 text-[11px]"
+                />
+              </div>
               <div className="flex items-center justify-between text-[11px] text-[#6d7280]">
-                <span>{s.item_count} 项</span>
+                <span>
+                  {s.done_count ?? 0}/{s.item_count} 完成
+                </span>
                 {s.status !== "active" && (
                   <button onClick={() => activate.mutate(s)} className="text-[#ffb088]">
                     设为进行中

@@ -146,11 +146,16 @@ function WorkflowCanvasInner({
         layout_x: n.position.x,
         layout_y: n.position.y,
       }));
-      const nextTransitions = nextEdges.map((e) => ({
-        from_state: e.source,
-        to_state: e.target,
-        name: typeof e.label === "string" && e.label ? e.label : "前进",
-      }));
+      const nextTransitions = nextEdges.map((e) => {
+        const prev = workflow.transitions.find((t) => t.from_state === e.source && t.to_state === e.target);
+        return {
+          from_state: e.source,
+          to_state: e.target,
+          name: typeof e.label === "string" && e.label ? e.label : prev?.name ?? "前进",
+          require_role: prev?.require_role ?? null,
+          require_approver: prev?.require_approver ?? false,
+        };
+      });
       onChange?.(
         mergeWorkflowCanvas(workflow.states, workflow.transitions, nextStates, nextTransitions),
       );

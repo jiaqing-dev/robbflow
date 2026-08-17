@@ -10,7 +10,14 @@ from robbflow_api.bootstrap import bootstrap_workspace
 from robbflow_api.db import get_db
 from robbflow_api.deps import CurrentContext, get_current
 from robbflow_api.events import emit
-from robbflow_api.schemas import WorkflowCreate, WorkflowOut, WorkflowPut, WorkflowStateOut
+from robbflow_api.schemas import (
+    WorkflowCreate,
+    WorkflowOut,
+    WorkflowPut,
+    WorkflowStateOut,
+    WorkflowTransitionIn,
+)
+from robbflow_api.services.rbac import require_admin
 from robbflow_domain.enums import EventType
 from robbflow_domain.models import Workflow, WorkflowState, WorkflowTransition
 from robbflow_workflow import WORKFLOW_PRESETS
@@ -39,7 +46,13 @@ def _serialize(wf: Workflow) -> WorkflowOut:
             for s in states
         ],
         transitions=[
-            {"from_state": t.from_state, "to_state": t.to_state, "name": t.name}
+            WorkflowTransitionIn(
+                from_state=t.from_state,
+                to_state=t.to_state,
+                name=t.name,
+                require_role=t.require_role,
+                require_approver=bool(t.require_approver),
+            )
             for t in wf.transitions
         ],
         created_at=wf.created_at,
@@ -84,6 +97,7 @@ async def create_workflow(
     ctx: CurrentContext = Depends(get_current),
     db: AsyncSession = Depends(get_db),
 ) -> WorkflowOut:
+    require_admin(ctx.role)
     preset = WORKFLOW_PRESETS.get(body.preset or "engineering")
     key = body.key or (body.name.lower().replace(" ", "-")[:64])
     exists = await db.scalar(
@@ -120,6 +134,8 @@ async def create_workflow(
                 from_state=trans.from_state,
                 to_state=trans.to_state,
                 name=trans.name,
+                require_role=getattr(trans, "require_role", None),
+                require_approver=bool(getattr(trans, "require_approver", False)),
             )
         )
     if body.is_default:
@@ -148,6 +164,7 @@ async def replace_workflow(
     ctx: CurrentContext = Depends(get_current),
     db: AsyncSession = Depends(get_db),
 ) -> WorkflowOut:
+    require_admin(ctx.role)
     wf = await _load(db, ctx.workspace.id, workflow_id)
     if not body.states:
         raise HTTPException(422, "Workflow needs at least one state")
@@ -212,6 +229,8 @@ async def replace_workflow(
                 from_state=trans.from_state,
                 to_state=trans.to_state,
                 name=trans.name,
+                require_role=getattr(trans, "require_role", None),
+                require_approver=bool(getattr(trans, "require_approver", False)),
             )
         )
     try:

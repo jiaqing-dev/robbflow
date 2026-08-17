@@ -14,7 +14,7 @@ export type TypeField = {
 
 export const SYSTEM_BLOCKS: Record<string, { name: string; slot: "main" | "sidebar" }> = {
   description: { name: "描述", slot: "main" },
-  docs: { name: "飞书文档", slot: "main" },
+  docs: { name: "文档", slot: "main" },
   relations: { name: "关联", slot: "main" },
   graph: { name: "追溯图", slot: "main" },
   activity: { name: "活动", slot: "main" },
@@ -137,6 +137,16 @@ const PRESETS: Record<string, DetailLayout> = {
   issue: {
     main: [sys("description"), sys("relations"), sys("activity")],
     sidebar: [sys("status"), sys("assignee"), sys("priority"), fld("kind"), sys("sprint"), sys("dates")],
+  },
+  ticket: {
+    main: [sys("description"), sys("docs"), sys("relations"), sys("activity")],
+    sidebar: [
+      sys("status"),
+      sys("assignee"),
+      sys("reporter"),
+      sys("priority"),
+      sys("dates"),
+    ],
   },
 };
 

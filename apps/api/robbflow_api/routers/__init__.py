@@ -3,8 +3,10 @@ from fastapi import APIRouter
 from robbflow_api.routers import (
     agent,
     auth,
+    collab,
     cycles,
     inbox,
+    integrations,
     meta,
     projects,
     types,
@@ -22,3 +24,5 @@ api_router.include_router(meta.router)
 api_router.include_router(workflows.router)
 api_router.include_router(types.router)
 api_router.include_router(cycles.router)
+api_router.include_router(collab.router)
+api_router.include_router(integrations.router)

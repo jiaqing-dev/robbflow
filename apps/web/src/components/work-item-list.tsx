@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 
 import type { WorkItem } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { PRIORITY_LABEL, STATUS_LABEL, TYPE_LABEL, typeColor } from "@/lib/labels";
+import { dueLabel, isOverdue, PRIORITY_LABEL, STATUS_LABEL, TYPE_LABEL, typeColor } from "@/lib/labels";
 
 export function WorkItemRow({
   item,
@@ -18,7 +18,7 @@ export function WorkItemRow({
     <button
       type="button"
       onClick={() => (onOpen ? onOpen(item) : router.push(`/issues/${item.key}`))}
-      className="group grid w-full grid-cols-[88px_1fr_88px_100px_72px] items-center gap-3 border-b border-[#1b1e27] px-4 py-2.5 text-left hover:bg-[#12141a]"
+      className="group grid w-full grid-cols-[88px_1fr_88px_88px_72px_72px] items-center gap-3 border-b border-[#1b1e27] px-4 py-2.5 text-left hover:bg-[#12141a]"
     >
       <span className="font-mono text-[11px] text-[#8b90a0]">{item.key}</span>
       <span className="flex min-w-0 items-center gap-2">
@@ -27,6 +27,9 @@ export function WorkItemRow({
       </span>
       <span className="text-[11px] text-[#8b90a0]">{STATUS_LABEL[item.status] ?? item.status}</span>
       <span className="text-[11px] text-[#8b90a0]">{PRIORITY_LABEL[item.priority] ?? item.priority}</span>
+      <span className={cn("text-[11px]", isOverdue(item) ? "text-rose-400" : "text-[#6d7280]")}>
+        {dueLabel(item.due_at) || "—"}
+      </span>
       <span className="truncate text-right text-[11px] text-[#6d7280]">
         {item.assignee?.name ?? "未指派"}
       </span>
@@ -48,11 +51,12 @@ export function WorkItemList({
   }
   return (
     <div>
-      <div className="grid grid-cols-[88px_1fr_88px_100px_72px] gap-3 border-b border-[#232633] px-4 py-2 text-[11px] tracking-wide text-[#6d7280]">
+      <div className="grid grid-cols-[88px_1fr_88px_88px_72px_72px] gap-3 border-b border-[#232633] px-4 py-2 text-[11px] tracking-wide text-[#6d7280]">
         <span>编号</span>
         <span>标题</span>
         <span>状态</span>
         <span>优先级</span>
+        <span>截止</span>
         <span className="text-right">负责人</span>
       </div>
       {items.map((item) => (

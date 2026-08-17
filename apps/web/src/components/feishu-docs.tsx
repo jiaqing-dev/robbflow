@@ -5,6 +5,7 @@ import { ExternalLink } from "lucide-react";
 import { useState } from "react";
 
 import { ApiError, dataApi, type WorkItemLink } from "@/lib/api";
+import { PROVIDER_LABEL } from "@/lib/labels";
 
 export function FeishuDocs({ itemId }: { itemId: string }) {
   const qc = useQueryClient();
@@ -33,14 +34,14 @@ export function FeishuDocs({ itemId }: { itemId: string }) {
   return (
     <div>
       <p className="mb-3 text-[12px] text-[#8b90a0]">
-        粘贴飞书文档链接即可引用。系统不建 Wiki，内容仍以飞书为准。
+        粘贴飞书、钉钉或任意 https 链接即可引用。系统不建 Wiki，正文仍以外部文档为准。
       </p>
       <div className="mb-3 space-y-2">
         {(links.data ?? []).map((link) => (
           <DocRow key={link.id} link={link} onRemove={() => remove.mutate(link.id)} />
         ))}
         {(links.data ?? []).length === 0 && !links.isLoading && (
-          <p className="text-[12px] text-[#6d7280]">还没有引用飞书文档</p>
+          <p className="text-[12px] text-[#6d7280]">还没有引用文档</p>
         )}
       </div>
       <div className="flex gap-2">
@@ -50,7 +51,7 @@ export function FeishuDocs({ itemId }: { itemId: string }) {
           onKeyDown={(e) => {
             if (e.key === "Enter" && url.trim()) add.mutate();
           }}
-          placeholder="https://xxx.feishu.cn/docx/…"
+          placeholder="https://… 飞书 / 钉钉 / 文档链接"
           className="h-[34px] min-w-0 flex-1 rounded-md border border-[#232633] bg-[#0e1014] px-3 text-[12px] outline-none focus:border-[#ff6a2b]"
         />
         <button
@@ -69,7 +70,9 @@ export function FeishuDocs({ itemId }: { itemId: string }) {
 function DocRow({ link, onRemove }: { link: WorkItemLink; onRemove: () => void }) {
   return (
     <div className="flex items-center gap-2 rounded-md border border-[#232633] px-3 py-2 text-[12px]">
-      <span className="rounded bg-[#1a1d26] px-1.5 py-0.5 text-[10px] text-[#ffb088]">飞书</span>
+      <span className="rounded bg-[#1a1d26] px-1.5 py-0.5 text-[10px] text-[#ffb088]">
+        {PROVIDER_LABEL[link.provider] ?? link.provider}
+      </span>
       <a
         href={link.url}
         target="_blank"

@@ -42,6 +42,7 @@ class WorkspaceOut(BaseModel):
 class MeOut(BaseModel):
     user: UserOut
     workspace: WorkspaceOut
+    role: str = "member"
 
 
 class ProjectCreate(BaseModel):
@@ -95,6 +96,7 @@ class WorkItemCreate(BaseModel):
     properties: dict[str, Any] = Field(default_factory=dict)
     sprint_id: UUID | None = None
     milestone_id: UUID | None = None
+    due_at: datetime | None = None
 
 
 class WorkItemUpdate(BaseModel):
@@ -106,6 +108,7 @@ class WorkItemUpdate(BaseModel):
     parent_id: UUID | None = None
     properties: dict[str, Any] | None = None
     due_at: datetime | None = None
+    start_at: datetime | None = None
     sprint_id: UUID | None = None
     milestone_id: UUID | None = None
 
@@ -126,6 +129,8 @@ class WorkItemOut(BaseModel):
     properties: dict[str, Any]
     sprint_id: UUID | None = None
     milestone_id: UUID | None = None
+    due_at: datetime | None = None
+    start_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     assignee: UserOut | None = None
@@ -208,6 +213,8 @@ class WorkflowTransitionIn(BaseModel):
     from_state: str
     to_state: str
     name: str | None = None
+    require_role: str | None = None
+    require_approver: bool = False
 
 
 class WorkflowCreate(BaseModel):
@@ -335,6 +342,8 @@ class SprintOut(BaseModel):
     end_at: datetime | None
     status: str
     item_count: int = 0
+    done_count: int = 0
+    progress: float = 0
 
     model_config = {"from_attributes": True}
 
@@ -363,3 +372,88 @@ class AgentPlanIn(BaseModel):
     prompt: str
     project_id: UUID | None = None
     apply: bool = False
+
+
+class NotificationOut(BaseModel):
+    id: UUID
+    title: str
+    body: str
+    entity_type: str | None
+    entity_id: UUID | None
+    payload: dict[str, Any]
+    read_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SavedViewIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    project_id: UUID | None = None
+    filters: dict[str, Any] = Field(default_factory=dict)
+
+
+class SavedViewOut(BaseModel):
+    id: UUID
+    name: str
+    project_id: UUID | None
+    filters: dict[str, Any]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DocumentCreate(BaseModel):
+    project_id: UUID | None = None
+    work_item_id: UUID | None = None
+    url: str | None = None
+    title: str | None = Field(default=None, max_length=300)
+    kind: str = "doc"
+    body: str | None = None
+    provider: str | None = None
+
+
+class DocumentOut(BaseModel):
+    id: UUID
+    project_id: UUID | None
+    work_item_id: UUID | None
+    provider: str
+    kind: str
+    title: str
+    url: str | None
+    mime: str | None
+    external_id: str | None
+    body: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GitLinkIn(BaseModel):
+    provider: str = "github"
+    repo: str
+    ref: str = ""
+    url: str
+    kind: str = "branch"
+
+
+class GitLinkOut(BaseModel):
+    id: UUID
+    provider: str
+    repo: str
+    ref: str
+    url: str
+    kind: str
+
+    model_config = {"from_attributes": True}
+
+
+class IntegrationSave(BaseModel):
+    provider: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class BindingIn(BaseModel):
+    provider: str
+    external_id: str = Field(min_length=1, max_length=200)

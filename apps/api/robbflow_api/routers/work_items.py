@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,10 +10,13 @@ from sqlalchemy.orm import selectinload
 from robbflow_api.db import get_db
 from robbflow_api.deps import CurrentContext, get_current
 from robbflow_api.events import emit
+from robbflow_api.routers.integrations import dispatch_status_notify
 from robbflow_api.schemas import (
     ActivityOut,
     CommentCreate,
     CommentOut,
+    GitLinkIn,
+    GitLinkOut,
     RelationCreate,
     RelationOut,
     WorkItemCreate,
@@ -21,15 +25,20 @@ from robbflow_api.schemas import (
     WorkItemOut,
     WorkItemUpdate,
 )
+from robbflow_api.services.notify import notify
+from robbflow_api.services.rbac import can_take_transition
 from robbflow_api.services.workflow import load_definition_for_item
 from robbflow_domain.association import association_allowed
+from robbflow_domain.doc_refs import parse_doc_url
 from robbflow_domain.enums import EventType, RelationType
-from robbflow_domain.feishu_docs import InvalidDocLinkError, parse_feishu_doc
+from robbflow_domain.feishu_docs import InvalidDocLinkError
 from robbflow_domain.graph import build_trace_graph, serialize_graph
 from robbflow_domain.models import (
     Activity,
     Comment,
+    GitLink,
     Project,
+    User,
     WorkItem,
     WorkItemLink,
     WorkItemRelation,
@@ -57,6 +66,9 @@ async def list_work_items(
     type: str | None = None,
     sprint_id: UUID | None = None,
     milestone_id: UUID | None = None,
+    parent_id: UUID | None = None,
+    priority: str | None = None,
+    overdue: bool = False,
     q: str | None = None,
     limit: int = Query(default=100, le=500),
 ) -> list[WorkItemOut]:
@@ -81,6 +93,16 @@ async def list_work_items(
         stmt = stmt.where(WorkItem.sprint_id == sprint_id)
     if milestone_id:
         stmt = stmt.where(WorkItem.milestone_id == milestone_id)
+    if parent_id:
+        stmt = stmt.where(WorkItem.parent_id == parent_id)
+    if priority:
+        stmt = stmt.where(WorkItem.priority == priority)
+    if overdue:
+        stmt = stmt.where(
+            WorkItem.due_at.is_not(None),
+            WorkItem.due_at < datetime.now(UTC),
+            WorkItem.status.notin_(["done", "cancelled", "launch", "wontfix"]),
+        )
     if assignee == "me":
         stmt = stmt.where(WorkItem.assignee_id == ctx.user.id)
     elif assignee == "unassigned":
@@ -123,6 +145,7 @@ async def create_work_item(
         properties=body.properties,
         sprint_id=body.sprint_id,
         milestone_id=body.milestone_id,
+        due_at=getattr(body, "due_at", None),
         position=float(project.next_number),
     )
     project.next_number += 1
@@ -190,6 +213,15 @@ async def update_work_item(
             definition.validate_transition(item.status, data["status"])
         except InvalidTransitionError as exc:
             raise HTTPException(422, str(exc)) from exc
+        edge = definition.find_transition(item.status, data["status"])
+        if edge and not can_take_transition(
+            role=ctx.role,
+            require_role=edge.require_role,
+            require_approver=edge.require_approver,
+            actor_id=ctx.user.id,
+            assignee_id=item.assignee_id,
+        ):
+            raise HTTPException(403, "当前角色不能执行这一步流转")
         old = item.status
         item.status = data.pop("status")
         await emit(
@@ -202,13 +234,38 @@ async def update_work_item(
             entity_id=item.id,
             action="moved",
         )
+        await notify(
+            db,
+            workspace_id=ctx.workspace.id,
+            recipient_id=item.assignee_id,
+            title=f"{item.key} 状态变为 {item.status}",
+            body=item.title,
+            entity_type="work_item",
+            entity_id=item.id,
+            payload={"key": item.key},
+            actor_id=ctx.user.id,
+        )
+        await dispatch_status_notify(db, ctx, item, item.status)
     if "properties" in data and data["properties"] is not None:
         merged = dict(item.properties or {})
         merged.update(data["properties"])
         item.properties = merged
         data.pop("properties")
+    prev_assignee = item.assignee_id
     for field, value in data.items():
         setattr(item, field, value)
+    if "assignee_id" in data and item.assignee_id != prev_assignee:
+        await notify(
+            db,
+            workspace_id=ctx.workspace.id,
+            recipient_id=item.assignee_id,
+            title=f"你被指派了 {item.key}",
+            body=item.title,
+            entity_type="work_item",
+            entity_id=item.id,
+            payload={"key": item.key},
+            actor_id=ctx.user.id,
+        )
     await emit(
         db,
         event_type=EventType.WORK_ITEM_UPDATED,
@@ -261,6 +318,36 @@ async def add_comment(
         entity_id=item.id,
         action="commented",
     )
+    await notify(
+        db,
+        workspace_id=ctx.workspace.id,
+        recipient_id=item.assignee_id,
+        title=f"{ctx.user.name} 评论了 {item.key}",
+        body=body.body[:200],
+        entity_type="work_item",
+        entity_id=item.id,
+        payload={"key": item.key},
+        actor_id=ctx.user.id,
+    )
+    mentioned = {part[1:] for part in body.body.split() if part.startswith("@") and len(part) > 1}
+    if mentioned:
+        members = list(
+            await db.scalars(
+                select(User).where(User.name.in_(mentioned))
+            )
+        )
+        for user in members:
+            await notify(
+                db,
+                workspace_id=ctx.workspace.id,
+                recipient_id=user.id,
+                title=f"{ctx.user.name} 在 {item.key} 中提到了你",
+                body=body.body[:200],
+                entity_type="work_item",
+                entity_id=item.id,
+                payload={"key": item.key},
+                actor_id=ctx.user.id,
+            )
     await db.commit()
     comment = await db.scalar(
         select(Comment).options(selectinload(Comment.author)).where(Comment.id == comment.id)
@@ -292,7 +379,7 @@ async def add_link(
 ) -> WorkItemLink:
     item = await _load(db, ctx, item_id)
     try:
-        parsed = parse_feishu_doc(body.url)
+        parsed = parse_doc_url(body.url)
     except InvalidDocLinkError as exc:
         raise HTTPException(422, str(exc)) from exc
     link = WorkItemLink(
@@ -307,7 +394,7 @@ async def add_link(
         await db.flush()
     except IntegrityError as exc:
         await db.rollback()
-        raise HTTPException(409, "该飞书文档已经引用过了") from exc
+        raise HTTPException(409, "该文档已经引用过了") from exc
     await emit(
         db,
         event_type=EventType.WORK_ITEM_UPDATED,
@@ -347,6 +434,89 @@ async def delete_link(
         entity_id=item.id,
         action="unlinked_doc",
     )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.get("/{item_id}/children", response_model=list[WorkItemOut])
+async def list_children(
+    item_id: str,
+    ctx: CurrentContext = Depends(get_current),
+    db: AsyncSession = Depends(get_db),
+) -> list[WorkItemOut]:
+    item = await _load(db, ctx, item_id)
+    rows = list(
+        await db.scalars(
+            select(WorkItem)
+            .options(
+                selectinload(WorkItem.assignee),
+                selectinload(WorkItem.project),
+                selectinload(WorkItem.creator),
+            )
+            .where(WorkItem.parent_id == item.id)
+            .order_by(WorkItem.created_at)
+        )
+    )
+    return [_serialize(row) for row in rows]
+
+
+@router.get("/{item_id}/git-links", response_model=list[GitLinkOut])
+async def list_git_links(
+    item_id: str,
+    ctx: CurrentContext = Depends(get_current),
+    db: AsyncSession = Depends(get_db),
+) -> list[GitLink]:
+    item = await _load(db, ctx, item_id)
+    result = await db.scalars(select(GitLink).where(GitLink.work_item_id == item.id))
+    return list(result)
+
+
+@router.post("/{item_id}/git-links", response_model=GitLinkOut)
+async def add_git_link(
+    item_id: str,
+    body: GitLinkIn,
+    ctx: CurrentContext = Depends(get_current),
+    db: AsyncSession = Depends(get_db),
+) -> GitLink:
+    item = await _load(db, ctx, item_id)
+    row = GitLink(
+        work_item_id=item.id,
+        provider=body.provider,
+        repo=body.repo,
+        ref=body.ref,
+        url=body.url,
+        kind=body.kind,
+    )
+    db.add(row)
+    await emit(
+        db,
+        event_type=EventType.WORK_ITEM_UPDATED,
+        payload={"key": item.key, "git": body.url, "relation": "implements"},
+        workspace_id=ctx.workspace.id,
+        actor_id=ctx.user.id,
+        entity_type="work_item",
+        entity_id=item.id,
+        action="linked_git",
+    )
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+@router.delete("/{item_id}/git-links/{link_id}")
+async def delete_git_link(
+    item_id: str,
+    link_id: UUID,
+    ctx: CurrentContext = Depends(get_current),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    item = await _load(db, ctx, item_id)
+    row = await db.scalar(
+        select(GitLink).where(GitLink.id == link_id, GitLink.work_item_id == item.id)
+    )
+    if not row:
+        raise HTTPException(404, "Git 关联不存在")
+    await db.delete(row)
     await db.commit()
     return {"ok": True}
 

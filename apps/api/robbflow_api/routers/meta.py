@@ -7,7 +7,6 @@ from robbflow_api.deps import CurrentContext, get_current
 from robbflow_api.schemas import WorkspaceOut
 from robbflow_domain.models import Membership, User
 from robbflow_domain.templates import WORK_TEMPLATES
-from robbflow_integrations import REGISTRY
 
 router = APIRouter(tags=["meta"])
 
@@ -28,11 +27,6 @@ async def members(
         .where(Membership.workspace_id == ctx.workspace.id)
     )
     return [{"id": str(u.id), "name": u.name, "email": u.email, "role": role} for u, role in rows]
-
-
-@router.get("/integrations")
-async def integrations() -> list[dict]:
-    return [{"key": k, "name": cls.name, "status": "planned"} for k, cls in REGISTRY.items()]
 
 
 @router.get("/work-templates")

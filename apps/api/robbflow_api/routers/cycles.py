@@ -14,7 +14,8 @@ from robbflow_domain.models import Milestone, Sprint, WorkItem
 router = APIRouter(tags=["cycles"])
 
 
-def _sprint_out(row: Sprint, count: int) -> SprintOut:
+def _sprint_out(row: Sprint, count: int, done: int = 0) -> SprintOut:
+    progress = round((done / count), 2) if count else 0
     return SprintOut(
         id=row.id,
         project_id=row.project_id,
@@ -24,6 +25,8 @@ def _sprint_out(row: Sprint, count: int) -> SprintOut:
         end_at=row.end_at,
         status=row.status,
         item_count=count,
+        done_count=done,
+        progress=progress,
     )
 
 
@@ -58,7 +61,15 @@ async def list_sprints(
         count = await db.scalar(
             select(func.count()).select_from(WorkItem).where(WorkItem.sprint_id == row.id)
         )
-        out.append(_sprint_out(row, count or 0))
+        done = await db.scalar(
+            select(func.count())
+            .select_from(WorkItem)
+            .where(
+                WorkItem.sprint_id == row.id,
+                WorkItem.status.in_(["done", "launch"]),
+            )
+        )
+        out.append(_sprint_out(row, count or 0, done or 0))
     return out
 
 

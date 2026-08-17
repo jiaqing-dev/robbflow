@@ -30,6 +30,7 @@ export function CreateIssueDialog({
   const [priority, setPriority] = useState("medium");
   const [projectId, setProjectId] = useState(defaultProjectId ?? "");
   const [assigneeId, setAssigneeId] = useState("");
+  const [dueAt, setDueAt] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -69,6 +70,7 @@ export function CreateIssueDialog({
         type,
         priority,
         assignee_id: assigneeId || null,
+        due_at: dueAt ? new Date(dueAt).toISOString() : null,
       }),
     onSuccess: () => {
       qc.invalidateQueries();
@@ -140,6 +142,12 @@ export function CreateIssueDialog({
             ))}
           </select>
         </div>
+        <input
+          type="datetime-local"
+          value={dueAt}
+          onChange={(e) => setDueAt(e.target.value)}
+          className="mb-4 w-full rounded-md border border-[#2a2e3a] bg-[#0b0c0e] px-2 py-2 text-[12px]"
+        />
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="rounded-md px-3 py-1.5 text-[12px] text-[#8b90a0]">
             取消
